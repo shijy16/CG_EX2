@@ -37,9 +37,11 @@ void Vector3::show(){
 
 void Vector3::normalize(){
 	double s = getLength();
-	x /= s;
-	y /= s;
-	z /= s;
+	if(x*x + y*y + z*z > 1e-6){
+		x /= s;
+		y /= s;
+		z /= s;
+	}
 
 }
 

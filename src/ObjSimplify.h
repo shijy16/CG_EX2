@@ -10,7 +10,7 @@
 #ifndef OBJSIMPLIFY_H
 #define OBJSIMPLIFY_H
 
-double t = 10;
+double t = 5;
 
 class MatrixK{
 public:
@@ -31,7 +31,7 @@ public:
         }
     }
 
-    MatrixK add(MatrixK a){
+    void add(MatrixK a){
         for(int i = 0;i < 4;i++){
             for(int j = 0;j < 4;j++){
                m[i][j] = a.m[i][j] + m[i][j];
@@ -174,7 +174,9 @@ public:
     int x,y;
     double cost;
     Vector3 bestV;
+    bool exist;
     Pair(int a,int b){
+        exist = true;
         x = a;
         y = b;
         bestV = Vector3();
@@ -184,6 +186,9 @@ public:
     }
     void setBestV(Vector3 p){
         bestV = p;
+    }
+    void del(){
+        exist = false;
     }
 };
 
@@ -220,21 +225,137 @@ public:
         getQvs();
         getPairs();
         getCostAndBestPos();
-        for(int i = 0;i < 100;i++){
-            printf("%.10f!!\n",pairs[0].cost);
-        }
-        buildPairHeap();
- 
-        // int x = 0;
-        // while(popPairHeap().cost < 0.1){
-        //     x ++;
-        // }
-        // writeObj();
+        std::make_heap(pairs.begin(),pairs.end(),pair_cmp);
+        run();
     }
 
-    void buildPairHeap(){
-        std::make_heap(pairs.begin(),pairs.end(),pair_cmp);
+    void run(){
+        printf("running...\n");
+        int goal = scale*face_cnt;
+        int index = face_cnt;
+		std::vector<int> change;
+		for (int i = 0; i < vertices.size(); i++) {
+			change.push_back(i);
+		}
+		// printf("%d,%d\n", index,pairs.size());
+        while(index > goal && pairs.size() > 0){
+            Pair lowCostPair = popPairHeap();
+            
+            int v1 = lowCostPair.x;
+            int v2 = lowCostPair.y;
+            Vector3 v = lowCostPair.bestV;
+            // printf("%d,%d,%d\n",index,v1,v2);
+            
+            vertices[v1].del();
+            vertices[v2].del();
+			vertices.push_back(Vertex(v));
+			change[v1] = vertices.size() - 1;
+			change[v2] = vertices.size() - 1;
+			change.push_back(vertices.size() - 1);
+            //删去旧面，加入新的面
+            for(int i = 0;i < vertices[v1].link_faces.size();i++){
+                if(!faces[vertices[v1].link_faces[i]].exist) continue;
+                Face temp = faces[vertices[v1].link_faces[i]];
+                //若面中两个点都有，删去
+				bool flag = true;
+                for(int j = 0;j < 3;j++){
+                    if(temp.vertice[j] == v2){
+                        faces[vertices[v1].link_faces[i]].del();
+                        index--;
+						flag = false;
+                    }
+					// 替换其中v1为v并将面连接到v
+					if (temp.vertice[j] == v1) {
+						faces[vertices[v1].link_faces[i]].vertice[j] = vertices.size() - 1;
+					}
+                }
+				if(flag)
+					vertices[vertices.size() - 1].addLinkFace(vertices[v1].link_faces[i]);
+            }
+            //  printf("%f\n",lowCostPair.cost);
+            for(int i = 0;i < vertices[v2].link_faces.size();i++){
+                if(!faces[vertices[v2].link_faces[i]].exist) continue;
+                Face temp = faces[vertices[v2].link_faces[i]];
+                //替换面中的v2，v1时已经删去应该删去的面
+                for(int j = 0;j < 3;j++){
+                    if(temp.vertice[j] == v2){    
+                        faces[vertices[v2].link_faces[i]].vertice[j] = vertices.size() - 1;
+						break;
+                    }
+                }
+				vertices[vertices.size() - 1].addLinkFace(vertices[v2].link_faces[i]);
+            }
+
+             //新点的误差矩阵
+            vertices[vertices.size() - 1].setQv(getQv(vertices.size() - 1));
+
+            //处理pair
+            for(int i = 0;i < pairs.size();i++){
+                if(!vertices[pairs[0].x].exist || !vertices[pairs[0].y].exist){
+					Pair p = popPairHeap();
+					int newV1 = change[p.x];
+					int newV2 = change[p.y];
+					if (newV1 == newV2) continue;
+                    double tt = (vertices[newV1].pos - vertices[newV2].pos).getLength();
+                    if(tt < t){
+                        Pair newPair = Pair(newV1,newV2);
+                        //新的cost
+                        std::pair<Vector3,double> temp = MatrixK::getBestV(vertices[newPair.x].Qv,vertices[newPair.y].Qv,vertices[newPair.x].pos,vertices[newPair.y].pos);
+                        newPair.setBestV(temp.first);
+                        newPair.setCost(temp.second);
+                        insertPairHeap(newPair);
+                    }
+                }else{
+                    break;
+                }
+            }
+        }
+
+
+		printf("Writing Object... faces:%d\n",index);
+		std::vector<Vector3> temp_vertices;
+		std::vector<int> temp_v_point;
+		int numv = 0;
+		int numt = 0;
+		for (int i = 0; i < vertices.size(); i++){
+			temp_v_point.push_back(i);
+		}
+		for (int i = 0; i < vertices.size(); i++){
+			if (vertices[i].exist){
+				temp_vertices.push_back(vertices[i].pos);
+				temp_v_point[i] = temp_vertices.size() - 1;
+				++numv;
+			}
+		}
+
+		for (int i = 0; i < faces.size(); i++){
+			if (faces[i].exist){
+				for (int j = 0; j < 3; j++){
+					int vinv = temp_v_point[faces[i].vertice[j]];
+					faces[i].vertice[j] = vinv;
+				}
+				++numt;
+			}
+		}
+
+		std::ofstream out(outfile);
+		if (!out.is_open()) {
+			out.close();
+			printf("Error Open Write File. Abort\n");
+		}
+		for (int i = 0; i < temp_vertices.size(); i++) {
+			out << "v " << temp_vertices[i].x << " " << temp_vertices[i].y << " " << temp_vertices[i].z << std::endl;
+		}
+		for (int i = 0; i < faces.size(); i++) {
+			if (faces[i].exist)
+				out << "f " << faces[i].vertice[0] + 1 << " " << faces[i].vertice[1] + 1 << " " << faces[i].vertice[2] + 1 << std::endl;
+		}
+		printf("Object write finished.\n");
+
+
+  //      printf("%d\n",index);
     }
+
 
     void insertPairHeap(Pair p){
         pairs.push_back(p);
@@ -265,7 +386,8 @@ public:
     void getPairs(){
         printf("getting Pairs with t=%f...\n",t);
         for(int i = 0;i < vertices.size();i++){
-            for(int j = 0;j < vertices[i].link_vertices.size() && vertices[i].link_vertices[j] < i;j++){
+            for(int j = 0;j < vertices[i].link_vertices.size();j++){
+                if(vertices[i].link_vertices[j] <= i) continue;
                 double temp = (vertices[i].pos - vertices[vertices[i].link_vertices[j]].pos).getLength();
                 if(temp < t){
                     pairs.push_back(Pair(i,vertices[i].link_vertices[j]));
@@ -304,6 +426,7 @@ public:
         if (! in.is_open()){
             in.close();
             printf("Error Reading File. Abort\n");
+			return;
         }
         int cnt = 0;
         printf("reading obj...\n");
@@ -316,16 +439,16 @@ public:
                 sscanf(buffer,"v %lf %lf %lf",&a,&b,&c);
                 Vertex x = Vertex(Vector3(a,b,c));
                 vertices.push_back(x);
+				vertex_cnt++;
             }else if(buffer[0] == 'f'){
                 int a = 0,b = 0,c = 0;
                 sscanf(buffer,"f %d %d %d",&a,&b,&c);
                 Face x = Face(a - 1,b - 1,c - 1);
                 faces.push_back(x);
-            }else if(buffer[0] == '#'){
-                sscanf(buffer,"# %d %d",&vertex_cnt,&face_cnt);
-                printf("vertex:%d\tface:%d\n",vertex_cnt,face_cnt);
+				face_cnt++;
             }
         }
+		printf("vertex:%d\tface:%d\n", vertex_cnt, face_cnt);
         in.close();
     }
 
@@ -347,7 +470,7 @@ public:
     }
 
     void writeObj(){
-        std::ofstream out(outfile);
+ /*       std::ofstream out(outfile);
         if (! out.is_open()){
             out.close();
             printf("Error Open Write File. Abort\n");
@@ -357,9 +480,10 @@ public:
             out << "v " << vertices[i].pos.x << " " << vertices[i].pos.y << " " << vertices[i].pos.z << std::endl;
         }
         for(int i = 0;i < faces.size();i++){
-            out << "f " << faces[i].vertice[0] + 1 << " " << faces[i].vertice[1] + 1 << " " << faces[i].vertice[2] + 1 << std::endl;
+            if(faces[i].exist)
+                out << "f " << faces[i].vertice[0] + 1 << " " << faces[i].vertice[1] + 1 << " " << faces[i].vertice[2] + 1 << std::endl;
         }
-        printf("Object write finished.\n");
+        printf("Object write finished.\n");*/
     }
 };
 #endif
