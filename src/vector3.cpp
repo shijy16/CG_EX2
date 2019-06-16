@@ -36,10 +36,11 @@ void Vector3::show(){
 }
 
 void Vector3::normalize(){
-	double s = sqrt(x*x + y*y + z*z);
+	double s = getLength();
 	x /= s;
 	y /= s;
 	z /= s;
+
 }
 
 double Vector3::getLength() {
