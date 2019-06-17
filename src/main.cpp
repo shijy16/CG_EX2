@@ -12,7 +12,7 @@ int main(int argc, char** argv){
     }
     ObjSimplifier* simplifier;
     simplifier = new ObjSimplifier(argv[1],argv[2],atof(argv[3]));
-
+    simplifier->run();
     stop = time(NULL);
 	printf("Used Time:%ld\n", (stop - start));
 }

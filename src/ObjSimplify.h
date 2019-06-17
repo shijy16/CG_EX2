@@ -10,7 +10,7 @@
 #ifndef OBJSIMPLIFY_H
 #define OBJSIMPLIFY_H
 
-double t = 5;
+double t = 10;
 
 class MatrixK{
 public:
@@ -220,17 +220,17 @@ public:
         outfile = out;
         scale = s;
         printf("initing simplifier:\t<input>%s <output>%s <scale>%f\n",infile,outfile,scale);
+    }
+
+    void run(){
         readObj();
         buildVertexLinks();
         getQvs();
         getPairs();
         getCostAndBestPos();
         std::make_heap(pairs.begin(),pairs.end(),pair_cmp);
-        run();
-    }
+        printf("running... pairs cnt:%d\n",pairs.size());
 
-    void run(){
-        printf("running...\n");
         int goal = scale*face_cnt;
         int index = face_cnt;
 		std::vector<int> change;
@@ -291,10 +291,24 @@ public:
 
             //处理pair
             for(int i = 0;i < pairs.size();i++){
+                if(change[pairs[0].x] == change[pairs[0].y]){
+                     popPairHeap();
+                     continue;
+                }
                 if(!vertices[pairs[0].x].exist || !vertices[pairs[0].y].exist){
 					Pair p = popPairHeap();
 					int newV1 = change[p.x];
+                    int last = p.x;
+                    while(newV1 != last){
+                        last = newV1;
+                        newV1 = change[newV1];
+                    }
+                    last = p.y;
 					int newV2 = change[p.y];
+                    while(newV2 != last){
+                        last = newV2;
+                        newV2 = change[newV2];
+                    }
 					if (newV1 == newV2) continue;
                     double tt = (vertices[newV1].pos - vertices[newV2].pos).getLength();
                     if(tt < t){
@@ -387,10 +401,11 @@ public:
         printf("getting Pairs with t=%f...\n",t);
         for(int i = 0;i < vertices.size();i++){
             for(int j = 0;j < vertices[i].link_vertices.size();j++){
-                if(vertices[i].link_vertices[j] <= i) continue;
-                double temp = (vertices[i].pos - vertices[vertices[i].link_vertices[j]].pos).getLength();
-                if(temp < t){
-                    pairs.push_back(Pair(i,vertices[i].link_vertices[j]));
+                if(vertices[i].link_vertices[j] > i){
+                    double temp = (vertices[i].pos - vertices[vertices[i].link_vertices[j]].pos).getLength();
+                    if(temp < t){
+                        pairs.push_back(Pair(i,vertices[i].link_vertices[j]));
+                    }
                 }
             }
         }
@@ -404,7 +419,7 @@ public:
             Vector3 v_t2 = vertices[faces[vertices[id].link_faces[i]].vertice[0]].pos - vertices[faces[vertices[id].link_faces[i]].vertice[2]].pos;
             Vector3 N = Vector3::cross(v_t1,v_t2);
             N.normalize();
-            double d = Vector3::dot(N,vertices[faces[vertices[id].link_faces[i]].vertice[0]].pos);
+            double d = Vector3::dot(N,vertices[id].pos);
             d = -d;
             MatrixK t = MatrixK(N.x,N.y,N.z,d);
             ans.add(t);
